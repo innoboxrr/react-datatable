@@ -12,6 +12,7 @@ export default function NavDropdownComponent({
     pos = 'bottom-left',
     mode = 'click',
     offset = 0,
+    // Es el nombre de una animacion de UIkit, no una clase nuestra.
     animation = 'uk-animation-slide-top-small',
     duration = 500,
     children,
@@ -27,8 +28,8 @@ export default function NavDropdownComponent({
             ref={host}
             id={id}
             uk-dropdown={`pos: ${pos}; mode: ${mode}; offset: ${offset}; animation: ${animation}; duration: ${duration};`}
-            className="uk-padding-remove z-10 hidden text-base list-none bg-white divide-y divide-gray-100 rounded-lg shadow w-44 dark:bg-slate-800 p-2">
-            <ul className="uk-nav uk-dropdown-nav">{children}</ul>
+            className="fe-p-0 z-10 hidden text-base list-none bg-white divide-y divide-gray-100 rounded-lg shadow w-44 dark:bg-slate-800 p-2">
+            <ul className="fe-menu">{children}</ul>
         </div>
     )
 }

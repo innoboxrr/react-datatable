@@ -24,7 +24,7 @@ export default function IconRouteComponent({
             to={buildPath(name, params, query)}
             className="block px-4 py-2 dark:hover:text-white dark:text-slate-400">
             <span
-                className="uk-margin-small-right uk-icon"
+                className="fe-mr-sm uk-icon"
                 uk-icon={`icon: ${icon}; ratio: ${ratio};`}
                 style={{ fontSize: `${ratio * 16}px` }}></span>
             <span className={textClass}>{text}</span>

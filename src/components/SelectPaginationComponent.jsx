@@ -10,9 +10,9 @@ export default function SelectPaginationComponent({ meta = {}, onPageChange }) {
     const last = meta.last_page ?? 1
 
     return (
-        <div className="pagination" uk-grid="">
-            <div className="uk-width-auto">
-                <ul className="uk-pagination uk-flex-left uk-margin-medium-top" uk-margin="">
+        <div className="pagination" fe-grid="">
+            <div className="fe-w-auto">
+                <ul className="fe-pagination fe-justify-start fe-mt-md" fe-mb="">
                     <li>
                         {meta.total > 0
                             ? <span>Showing {meta.from} to {meta.to} of {meta.total} entries</span>
@@ -21,8 +21,8 @@ export default function SelectPaginationComponent({ meta = {}, onPageChange }) {
                 </ul>
             </div>
 
-            <div className="uk-width-expand">
-                <ul className="uk-pagination uk-flex-right uk-margin-medium-top" uk-margin="">
+            <div className="fe-w-expand">
+                <ul className="fe-pagination fe-justify-end fe-mt-md" fe-mb="">
                     {current > 1 ? (
                         <li>
                             <a
@@ -32,7 +32,7 @@ export default function SelectPaginationComponent({ meta = {}, onPageChange }) {
                                     event.preventDefault()
                                     onPageChange?.(current - 1)
                                 }}>
-                                <span uk-pagination-previous=""></span>
+                                <span fe-page-prev=""></span>
                             </a>
                         </li>
                     ) : null}
@@ -58,7 +58,7 @@ export default function SelectPaginationComponent({ meta = {}, onPageChange }) {
                                     event.preventDefault()
                                     onPageChange?.(current + 1)
                                 }}>
-                                <span uk-pagination-next=""></span>
+                                <span fe-page-next=""></span>
                             </a>
                         </li>
                     ) : null}

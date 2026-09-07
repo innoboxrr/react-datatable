@@ -39,7 +39,7 @@ export default function DataTableComponent({
 
     return (
         <div className="sm:rounded-lg overflow-x-auto">
-            <table className="min-w-full w-full text-sm text-left text-slate-500 dark:text-slate-400 p-4 ">
+            <table className="min-w-full w-full text-sm text-left text-slate-500 dark:text-slate-400 p-4">
                 {showTableHeader ? (
                     <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 rounded-sm">
                         <tr>
@@ -53,7 +53,7 @@ export default function DataTableComponent({
                                     {column.value}
                                 </th>
                             ))}
-                            {actions ? <th className="uk-table-shrink"></th> : null}
+                            {actions ? <th className="fe-shrink"></th> : null}
                         </tr>
                     </thead>
                 ) : null}
@@ -91,7 +91,7 @@ export default function DataTableComponent({
                             })}
 
                             {actions ? (
-                                <td className="uk-text-right">
+                                <td className="fe-text-right">
                                     <button
                                         type="button"
                                         aria-label={`Acciones del registro ${row.id}`}

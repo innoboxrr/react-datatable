@@ -64,10 +64,10 @@ export default function DataTable({
         <div>
             {showTopbar ? (
                 <div>
-                    <div className="uk-container uk-container-expand pt-4">
-                        <div uk-grid="">
+                    <div className="fe-container fe-container-wide pt-4">
+                        <div fe-grid="">
                             {hasActions ? (
-                                <div className="uk-width-expand">
+                                <div className="fe-w-expand">
                                     <button
                                         type="button"
                                         className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
@@ -84,17 +84,17 @@ export default function DataTable({
                                     </NavDropdownComponent>
                                 </div>
                             ) : (
-                                <div><div className="uk-width-expand"></div></div>
+                                <div><div className="fe-w-expand"></div></div>
                             )}
 
                             {hasFilter ? (
-                                <div className="uk-width-auto">
-                                    <div className="uk-grid-divider uk-child-width-expand uk-text-center" uk-grid="">
+                                <div className="fe-w-auto">
+                                    <div className="fe-grid-divider fe-children-expand fe-text-center" fe-grid="">
                                         <div>
                                             <button
                                                 type="button"
                                                 aria-label="Update results"
-                                                className="uk-text-right pointer"
+                                                className="fe-text-right pointer"
                                                 onClick={updateFilters}>
                                                 <svg className="w-6 h-6 text-slate-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 18 20">
                                                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 1v5h-5M2 19v-5h5m10-4a8 8 0 0 1-14.947 3.97M1 10a8 8 0 0 1 14.947-3.97" />
@@ -107,7 +107,7 @@ export default function DataTable({
                                                 type="button"
                                                 aria-label="Buscar"
                                                 aria-expanded={filtersOpen}
-                                                className="uk-text-right pointer"
+                                                className="fe-text-right pointer"
                                                 onClick={() => setFiltersOpen((open) => ! open)}>
                                                 <svg className="w-6 h-6 text-slate-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 18">
                                                     <path d="M18.85 1.1A1.99 1.99 0 0 0 17.063 0H2.937a2 2 0 0 0-1.566 3.242L6.99 9.868 7 14a1 1 0 0 0 .4.8l4 3A1 1 0 0 0 13 17l.01-7.134 5.66-6.676a1.99 1.99 0 0 0 .18-2.09Z" />
@@ -123,15 +123,15 @@ export default function DataTable({
                     {hasFilter ? (
                         // El uk-toggle de la version Vue trabaja sobre el DOM
                         // por su cuenta; en React el estado gobierna la vista.
-                        <div className="filter-form uk-card uk-card-body uk-padding-remove-top" hidden={! filtersOpen}>
+                        <div className="filter-form fe-card fe-card-body fe-pt-0" hidden={! filtersOpen}>
                             {filterForm}
                         </div>
                     ) : null}
                 </div>
             ) : null}
 
-            <div className={`uk-container uk-container-expand${showTopbar ? ' ptb-20' : ''}`}>
-                <div className={`uk-padding-small${cardWrapper ? ' bg-white p-6 rounded-lg shadow dark:border-slate-700 dark:bg-slate-800' : ''}`}>
+            <div className={`fe-container fe-container-wide${showTopbar ? ' ptb-20' : ''}`}>
+                <div className={`fe-p-sm${cardWrapper ? ' bg-white p-6 rounded-lg shadow dark:border-slate-700 dark:bg-slate-800' : ''}`}>
                     <DataTableComponent
                         actions={hasActions}
                         dataTable={dataTable}

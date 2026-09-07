@@ -13,7 +13,7 @@ export default function DisabledLinkComponent({ icon = '', text }) {
             className="disabled-link block px-4 py-2 dark:hover:text-white dark:text-slate-400"
             uk-tooltip="title: This action is not authorized; pos:right"
             onClick={(event) => event.preventDefault()}>
-            {showIcon ? <span className="uk-margin-small-right uk-icon" uk-icon={icon}></span> : null}
+            {showIcon ? <span className="fe-mr-sm uk-icon" uk-icon={icon}></span> : null}
             <span>{text}</span>
         </a>
     )

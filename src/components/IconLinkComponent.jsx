@@ -17,7 +17,7 @@ export default function IconLinkComponent({
             target={target}
             onClick={onClick}>
             <span
-                className="uk-margin-small-right uk-icon"
+                className="fe-mr-sm uk-icon"
                 uk-icon={`icon: ${icon}; ratio: ${ratio};`}
                 style={{ fontSize: `${ratio * 16}px` }}></span>
             <span className={textClass}>{text}</span>
