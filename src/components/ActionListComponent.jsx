@@ -2,13 +2,9 @@ import DisabledLinkComponent from './DisabledLinkComponent.jsx'
 import IconLinkComponent from './IconLinkComponent.jsx'
 import IconRouteComponent from './IconRouteComponent.jsx'
 
+// Un popover se cierra solo: no hace falta preguntarle nada a nadie.
 const closeDropdown = (event) => {
-    const dropdown = event.target.closest('.uk-dropdown')
-
-    // UIkit lo aporta la aplicación anfitriona.
-    if (dropdown) {
-        globalThis.UIkit?.dropdown(dropdown)?.hide(false)
-    }
+    event.target.closest('[popover]')?.hidePopover()
 }
 
 /**

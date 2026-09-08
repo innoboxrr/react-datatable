@@ -1,35 +1,98 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { autoUpdate, computePosition, flip, offset as offsetMiddleware, shift } from '@floating-ui/dom'
+import { classFor } from 'innoboxrr-form-core'
 
 /**
  * Gemelo de NavDropdownComponent.vue.
  *
- * UIkit lee el atributo `uk-dropdown` del DOM. React lo escribe igual, pero
- * UIkit sólo lo procesa al montarse el nodo, así que se le avisa — con guarda,
- * porque UIkit lo aporta la aplicación anfitriona y en una prueba no está.
+ * Antes lo movía `uk-dropdown`, y como UIkit sólo procesa el atributo al
+ * montarse el nodo, había que avisarle con `UIkit.update()` — con guarda,
+ * porque UIkit lo aportaba la aplicación anfitriona sin que nadie lo
+ * declarara, y en una prueba no estaba.
+ *
+ * La mitad de lo que hacía ya lo hace el navegador. La **Popover API** —el
+ * atributo `popover` y el `popoverTarget` del botón— aporta de fábrica la capa
+ * superior, el cierre al pulsar fuera y el cierre con Escape. Lo único que
+ * falta es colocarlo, y de eso se ocupa Floating UI.
+ *
+ * El botón que lo abre sólo necesita `popoverTarget` con este mismo id:
+ *
+ *     <button popoverTarget={`dropdown_${row.id}`}>…</button>
+ *     <NavDropdownComponent id={`dropdown_${row.id}`} pos="left" />
+ *
+ * @param {{ id: string, pos?: string, offset?: number, children?: any }} props
  */
 export default function NavDropdownComponent({
     id,
+    // Se conservan los nombres que usaba UIkit para no romper a quien ya los
+    // pasa; `bottom-left` y compañía se traducen a los de Floating UI.
     pos = 'bottom-left',
-    mode = 'click',
-    offset = 0,
-    // Es el nombre de una animacion de UIkit, no una clase nuestra.
-    animation = 'uk-animation-slide-top-small',
-    duration = 500,
+    offset = 4,
     children,
 }) {
-    const host = useRef(null)
+    const panel = useRef(null)
+    const stopFollowing = useRef(null)
+
+    const placement = (() => {
+        const [side, align] = pos.split('-')
+
+        if (! align) {
+            return side
+        }
+
+        // UIkit dice `bottom-left` para «debajo, alineado a la izquierda»;
+        // Floating UI lo llama `bottom-start`.
+        return `${side}-${align === 'left' ? 'start' : 'end'}`
+    })()
+
+    const onBeforeToggle = useCallback((event) => {
+        if (event.newState !== 'open') {
+            stopFollowing.current?.()
+            stopFollowing.current = null
+
+            return
+        }
+
+        // El botón es quien apunta a este panel, así que se encuentra por el
+        // atributo y no hace falta que nadie lo pase como prop.
+        const trigger = document.querySelector(`[popovertarget="${id}"]`)
+
+        if (! trigger || ! panel.current) {
+            return
+        }
+
+        // autoUpdate recoloca al hacer scroll o redimensionar: un menú abierto
+        // que se queda flotando donde estaba es peor que uno mal colocado.
+        stopFollowing.current = autoUpdate(trigger, panel.current, () => {
+            computePosition(trigger, panel.current, {
+                placement,
+                middleware: [
+                    offsetMiddleware(offset),
+                    // Si no cabe abajo, se va arriba; si se sale por un lado,
+                    // se desplaza para caber.
+                    flip(),
+                    shift({ padding: 8 }),
+                ],
+            }).then(({ x, y }) => {
+                Object.assign(panel.current.style, { left: `${x}px`, top: `${y}px` })
+            })
+        })
+    }, [id, offset, placement])
 
     useEffect(() => {
-        globalThis.UIkit?.update?.(host.current)
-    }, [])
+        const node = panel.current
+
+        node?.addEventListener('beforetoggle', onBeforeToggle)
+
+        return () => {
+            node?.removeEventListener('beforetoggle', onBeforeToggle)
+            stopFollowing.current?.()
+        }
+    }, [onBeforeToggle])
 
     return (
-        <div
-            ref={host}
-            id={id}
-            uk-dropdown={`pos: ${pos}; mode: ${mode}; offset: ${offset}; animation: ${animation}; duration: ${duration};`}
-            className="fe-p-0 z-10 hidden text-base list-none bg-white divide-y divide-gray-100 rounded-lg shadow w-44 dark:bg-slate-800 p-2">
-            <ul className="fe-menu">{children}</ul>
+        <div ref={panel} id={id} popover="" className={classFor('menu')}>
+            <ul className="fe-menu-list">{children}</ul>
         </div>
     )
 }
