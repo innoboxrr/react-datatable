@@ -1,6 +1,6 @@
 {
   "name": "innoboxrr-react-datatable",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Gemelo React de innoboxrr-vue-datatable: el mismo contrato de modelo, la misma tabla.",
   "type": "module",
   "main": "index.js",
@@ -37,10 +37,11 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@iconify/react": "^6.0.0",
     "axios": "^1.7.0"
   },
   "peerDependencies": {
-    "innoboxrr-form-core": "^2.0.0",
+    "innoboxrr-form-core": "^2.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0"

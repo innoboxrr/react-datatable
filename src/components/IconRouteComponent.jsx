@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { buildPath } from '../routes.js'
+import DatatableIcon from './DatatableIcon.jsx'
 
 /**
  * Gemelo de IconRouteComponent.vue.
@@ -23,10 +24,7 @@ export default function IconRouteComponent({
         <Link
             to={buildPath(name, params, query)}
             className="block px-4 py-2 dark:hover:text-white dark:text-slate-400">
-            <span
-                className="fe-mr-sm uk-icon"
-                uk-icon={`icon: ${icon}; ratio: ${ratio};`}
-                style={{ fontSize: `${ratio * 16}px` }}></span>
+            <DatatableIcon icon={icon} ratio={ratio} />
             <span className={textClass}>{text}</span>
         </Link>
     )

@@ -1,3 +1,5 @@
+import DatatableIcon from './DatatableIcon.jsx'
+
 /**
  * Gemelo de IconLinkComponent.vue.
  */
@@ -16,10 +18,7 @@ export default function IconLinkComponent({
             href={link}
             target={target}
             onClick={onClick}>
-            <span
-                className="fe-mr-sm uk-icon"
-                uk-icon={`icon: ${icon}; ratio: ${ratio};`}
-                style={{ fontSize: `${ratio * 16}px` }}></span>
+            <DatatableIcon icon={icon} ratio={ratio} />
             <span className={textClass}>{text}</span>
         </a>
     )
