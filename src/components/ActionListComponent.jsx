@@ -3,8 +3,11 @@ import IconLinkComponent from './IconLinkComponent.jsx'
 import IconRouteComponent from './IconRouteComponent.jsx'
 
 // Un popover se cierra solo: no hace falta preguntarle nada a nadie.
+// La llamada es opcional porque hidePopover no existe en un navegador anterior
+// a la Popover API —ni en jsdom—, y un menu que no cierra es mejor que una
+// excepcion.
 const closeDropdown = (event) => {
-    event.target.closest('[popover]')?.hidePopover()
+    event.target.closest('[popover]')?.hidePopover?.()
 }
 
 /**
