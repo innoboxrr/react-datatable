@@ -532,7 +532,7 @@ describe('permisos y acciones', () => {
 
 describe('seleccion', () => {
     const selectableModel = () => makeModel({
-        bulkActions: () => [{ id: 'delete', name: 'Borrar seleccionados', callback: 'bulkDelete', danger: true }],
+        bulkActions: () => [{ id: 'delete', name: 'Borrar seleccionados', callback: 'bulkDelete', danger: true, params: { permanently: false } }],
         bulkDelete: vi.fn(() => Promise.resolve()),
     })
 
@@ -578,7 +578,7 @@ describe('seleccion', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Borrar seleccionados' }))
         await settle()
 
-        expect(model.bulkDelete).toHaveBeenCalledWith(['1', '2'], [expect.objectContaining({ id: 1 }), expect.objectContaining({ id: 2 })])
+        expect(model.bulkDelete).toHaveBeenCalledWith(['1', '2'], [expect.objectContaining({ id: 1 }), expect.objectContaining({ id: 2 })], { permanently: false })
         expect(ref.current.selectedIds).toEqual([])
         expect(dataCalls()).toHaveLength(2)
     })

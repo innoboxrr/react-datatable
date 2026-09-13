@@ -332,7 +332,9 @@ export default function useDataTable({
 
     /**
      * Una acción masiva recibe los ids seleccionados —también los de otras
-     * páginas— y las filas cargadas que están entre ellos.
+     * páginas—, las filas cargadas que están entre ellos y sus `params`. Con
+     * los params, una misma función sirve para varias acciones: marcar como
+     * publicado y marcar como borrador son la misma llamada con otro valor.
      */
     const runBulk = useCallback(async (action) => {
         const current = latest.current
@@ -349,7 +351,7 @@ export default function useDataTable({
         const loaded = current.table.getSelectedRowModel().rows.map((row) => row.original)
 
         try {
-            await current.model[action.callback](ids, loaded)
+            await current.model[action.callback](ids, loaded, action.params ?? {})
         } catch (failure) {
             if (! core.isCancelled(failure)) {
                 notifyError(core.describeError(failure, text, text.actionFailed).message)
