@@ -1,45 +1,35 @@
 import axios from 'axios'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import {
+    columnVisibilityFeature,
+    rowSelectionFeature,
+    rowSortingFeature,
+    tableFeatures,
+    useTable,
+} from '@tanstack/react-table'
+import { notifyError, notifySuccess } from 'innoboxrr-form-core'
+
+import * as core from './table.js'
 
 /**
- * Se leía de la global `csrf_token`, que la aplicación anfitriona tenía que
- * definir en window: el componente no se podía montar fuera de ella.
+ * Solo lo que la tabla usa. El orden y la paginación los hace el servidor, así
+ * que no hay modelos de filas ordenadas ni paginadas: TanStack Table lleva el
+ * estado —qué columnas se ven, qué filas están seleccionadas, por qué columna
+ * se ordena— y la tabla pinta.
  */
-export const csrfToken = () => globalThis.csrf_token
-    ?? document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-    ?? ''
+const features = tableFeatures({ rowSortingFeature, columnVisibilityFeature, rowSelectionFeature })
+
+// Un array nuevo en cada render invalidaría los modelos de TanStack Table.
+const NO_ROWS = []
+const NO_SELECTION = {}
 
 /**
- * Sustituye a `_.isEqual` de lodash, que la versión Vue usaba como global sin
- * declararla como dependencia.
- */
-export const isEqual = (a, b) => {
-    if (a === b) {
-        return true
-    }
-
-    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
-        return false
-    }
-
-    const keysA = Object.keys(a)
-    const keysB = Object.keys(b)
-
-    return keysA.length === keysB.length && keysA.every((key) => isEqual(a[key], b[key]))
-}
-
-const hiddenColumnIds = (hideColumns) => hideColumns.map(
-    // Se admite tanto ['name'] como [{ id: 'name' }]: el contrato nunca estuvo
-    // documentado y por ahí circulan las dos formas.
-    (column) => (typeof column === 'string' ? column : column?.id)
-)
-
-/**
- * Toda la lógica de la tabla: cargar, ordenar, paginar y resolver políticas.
+ * Toda la lógica de la tabla: cargar, ordenar, paginar, seleccionar y resolver
+ * permisos. Es la misma que `useDataTable` de innoboxrr-vue-datatable.
  *
- * Está fuera del componente a propósito. Es exactamente lo mismo que hace la
- * versión Vue, y así se puede probar sin montar nada — y reutilizar si alguien
- * quiere pintar la tabla de otra forma.
+ * Está fuera del componente para poder probarla y para pintar la misma tabla
+ * de otra forma.
  */
 export default function useDataTable({
     dataUrl,
@@ -49,208 +39,360 @@ export default function useDataTable({
     policyMethod = 'post',
     formFilters = {},
     externalFilters = {},
+    extraParams = {},
+    extraQuery = {},
     hideColumns = [],
+    selectable = false,
+    labels = core.DEFAULT_LABELS,
+    navigate = null,
 }) {
-    const head = useMemo(() => {
-        const hidden = hiddenColumnIds(hideColumns)
+    const head = useMemo(() => model.dataTableHead(), [model])
+    const columns = useMemo(() => core.columnsFrom(head), [head])
 
-        return model.dataTableHead().filter((column) => ! hidden.includes(column.id))
-    }, [model, hideColumns])
+    // Los props llegan como objetos nuevos en cada render del padre: se
+    // compara su contenido, no su identidad.
+    const hiddenKey = core.snapshot(core.hiddenColumnIds(hideColumns))
+    const formKey = core.snapshot(formFilters)
+    const externalKey = core.snapshot(externalFilters)
 
-    const [body, setBody] = useState([])
-    const [pagination, setPagination] = useState({ meta: {}, links: [] })
-    const [crudActions, setCrudActions] = useState(() => model.crudActions())
-    const [sort, setSort] = useState(() => model.dataTableSort())
+    const visibleHead = useMemo(() => {
+        const hidden = JSON.parse(hiddenKey)
+
+        return head.filter((column) => ! hidden.includes(column.id))
+    }, [head, hiddenKey])
+
+    const columnVisibility = useMemo(() => core.visibilityFrom(JSON.parse(hiddenKey)), [hiddenKey])
+
+    const [rows, setRows] = useState(NO_ROWS)
+    const [meta, setMeta] = useState({})
+    const [links, setLinks] = useState(NO_ROWS)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState(null)
+    const [sort, setSort] = useState(() => ({ ...model.dataTableSort() }))
     const [orderBy, setOrderBy] = useState('id')
     const [page, setPage] = useState(1)
 
-    const internalSort = useRef(false)
-    const dataAttempts = useRef(0)
-    const policyAttempts = useRef(0)
-    const timers = useRef([])
+    /** Lo que respondió el backend de permisos, por fila y para la barra. */
+    const [allowed, setAllowed] = useState({})
 
-    // Los props cambian de identidad en cada render del padre; las refs
-    // evitan que eso reprograme la carga en bucle.
+    const sorting = useMemo(() => core.sortingFrom(orderBy, sort), [orderBy, sort])
+
+    const table = useTable({
+        features,
+        columns,
+        data: rows,
+        getRowId: (row, index) => String(row?.id ?? index),
+        manualSorting: true,
+        enableRowSelection: selectable === true,
+        isRowRangeSelectionEvent: core.isRangeEvent,
+        state: { columnVisibility, sorting },
+    })
+
+    const rowSelection = table.state.rowSelection ?? NO_SELECTION
+    const selectedIds = useMemo(() => Object.keys(rowSelection).filter((id) => rowSelection[id]), [rowSelection])
+
+    /**
+     * Una copia por fila y carga, para que un parser del modelo no pueda mutar
+     * los datos de la tabla.
+     */
+    const clones = useMemo(() => rows.map(core.cloneRow), [rows])
+
+    const crudActions = useMemo(
+        () => core.withPolicies(model.crudActions(), allowed[core.CRUD_POLICIES]),
+        [model, allowed]
+    )
+
+    const bulkActions = useMemo(
+        () => (typeof model.bulkActions === 'function' ? model.bulkActions() : NO_ROWS),
+        [model]
+    )
+
+    const rowActions = useCallback(
+        (row) => core.withPolicies(row?.actions ?? NO_ROWS, allowed[String(row?.id)]),
+        [allowed]
+    )
+
+    // Lo que las funciones asíncronas leen cuando terminan: el valor de ese
+    // momento, no el del render en que empezaron.
     const latest = useRef({})
-    latest.current = { dataUrl, dataMethod, model, formFilters, externalFilters, orderBy, sort, page }
 
-    const getFilters = useCallback(() => {
-        const { formFilters: form, externalFilters: external, orderBy: by, sort: order, page: current } = latest.current
+    latest.current = {
+        dataUrl, dataMethod, model, policyUrl, policyMethod, formFilters, externalFilters,
+        extraParams, extraQuery, labels, navigate, orderBy, sort, page, rows, allowed, table,
+    }
 
-        const params = { _token: csrfToken(), managed: true, except_view_any: true }
-        const ordering = { orderBy: by, orderMode: order[by] }
+    const internalSort = useRef(false)
+    const requestId = useRef(0)
+    const mounted = useRef(false)
 
-        // Con orden interno, el del usuario gana a lo que traigan los filtros
-        // externos; sin él, es al revés.
-        return internalSort.current
-            ? { ...params, ...form, ...external, ...ordering, page: current }
-            : { ...params, ...form, ...ordering, ...external, page: current }
+    useEffect(() => {
+        mounted.current = true
+
+        return () => {
+            mounted.current = false
+        }
     }, [])
 
-    const fetchData = useCallback(async () => {
-        const filters = getFilters()
-        const { dataUrl: url, dataMethod: method } = latest.current
+    const load = useCallback(async () => {
+        const id = ++requestId.current
+        const current = latest.current
+
+        const filters = core.requestFilters({
+            formFilters: current.formFilters,
+            externalFilters: current.externalFilters,
+            orderBy: current.orderBy,
+            sort: current.sort,
+            page: current.page,
+            internalSort: internalSort.current,
+        })
+
+        current.model.setFilters?.(filters)
+        setLoading(true)
+
+        // Una respuesta que llega tarde no pisa a la de una petición posterior.
+        const stale = () => id !== requestId.current || ! mounted.current
 
         try {
-            const response = await axios({
-                method,
-                url,
-                data: method === 'post' ? filters : null,
-                params: method === 'get' ? filters : null,
-            })
+            const response = await axios(core.requestConfig(current.dataMethod, current.dataUrl, filters))
 
-            dataAttempts.current = 0
-            setBody(response.data.data)
-            setPagination({ meta: response.data.meta, links: response.data.links })
-        } catch (error) {
-            // Un fallo de red no trae respuesta: leer error.response.status sin
-            // comprobarlo lanzaba un TypeError dentro del propio manejador.
-            if (error.response?.status === 403) {
+            if (stale()) {
                 return
             }
 
-            if (dataAttempts.current <= 3) {
-                timers.current.push(window.setTimeout(() => {
-                    dataAttempts.current += 1
-                    fetchData()
-                }, 1500))
+            setRows(response.data?.data ?? NO_ROWS)
+            setMeta(response.data?.meta ?? {})
+            setLinks(response.data?.links ?? NO_ROWS)
+            setError(null)
+
+            // Con datos nuevos los permisos se vuelven a preguntar.
+            setAllowed({})
+        } catch (failure) {
+            if (stale()) {
+                return
+            }
+
+            const described = core.describeError(failure, latest.current.labels)
+
+            if (described.status === 403) {
+                setRows(NO_ROWS)
+                setMeta({})
+            } else if (latest.current.rows.length > 0) {
+                // Con filas en pantalla el error no tiene sitio en la tabla:
+                // se avisa y se deja lo que había.
+                notifyError(described.message)
+            }
+
+            setError(described)
+        } finally {
+            if (! stale()) {
+                setLoading(false)
             }
         }
-    }, [getFilters])
+    }, [])
 
-    const updateFilters = useCallback(() => {
-        latest.current.model.setFilters(getFilters())
+    const clearSelection = useCallback(() => {
+        latest.current.table.resetRowSelection(true)
+    }, [])
 
-        return fetchData()
-    }, [fetchData, getFilters])
+    /**
+     * Una sola petición por cambio. Un filtro nuevo en otra página primero
+     * vuelve a la 1 y carga en la pasada siguiente; antes eran dos peticiones
+     * iguales, porque la página y los filtros se vigilaban por separado.
+     */
+    const seen = useRef({ formKey, externalKey })
+    const sortKey = core.snapshot(sort)
 
-    const sortColumn = useCallback((column) => {
-        if (column.sortable !== true) {
+    useEffect(() => {
+        const previous = seen.current
+
+        seen.current = { formKey, externalKey }
+
+        // Un filtro nuevo o externo descarta la selección, que era de otro
+        // listado; solo el del formulario vuelve a la primera página.
+        if (previous.formKey !== formKey || previous.externalKey !== externalKey) {
+            clearSelection()
+        }
+
+        if (previous.formKey !== formKey && page !== 1) {
+            setPage(1)
+
             return
         }
 
-        // A partir de aquí el orden elegido por el usuario manda sobre el que
-        // puedan traer los filtros externos.
+        load()
+    }, [formKey, externalKey, orderBy, sortKey, page, load, clearSelection])
+
+    const refresh = useCallback(() => load(), [load])
+
+    const sortColumn = useCallback((column) => {
+        if (column?.sortable !== true) {
+            return
+        }
+
         internalSort.current = true
 
+        setSort((current) => core.toggledSort(current, column.id))
         setOrderBy(column.id)
-        setSort((current) => {
-            const next = { ...current, [column.id]: current[column.id] === 'asc' ? 'desc' : 'asc' }
-
-            latest.current.sort = next
-            latest.current.orderBy = column.id
-
-            return next
-        })
     }, [])
 
     const updatePage = useCallback((next) => {
-        latest.current.page = next
-        setPage(next)
+        const value = Number(next)
+
+        if (Number.isInteger(value) && value >= 1) {
+            setPage(value)
+        }
     }, [])
 
-    const actionClicked = useCallback(async (action) => {
-        try {
-            await latest.current.model[action.callback](action.params)
-
-            return updateFilters()
-        } catch (error) {
-            console.error(error)
-        }
-    }, [updateFilters])
-
     /**
-     * Pregunta al backend qué acciones puede ejecutar el usuario sobre esa
-     * fila y marca `policy` en cada una.
+     * Pregunta al backend qué se puede hacer con una fila —o con la barra, sin
+     * id— antes de abrir su menú. Lo que responde se guarda hasta la próxima
+     * carga.
      */
-    const actionButtonClicked = useCallback(async (actions) => {
-        const requestData = { _token: csrfToken(), id: actions[0]?.params?.id ?? null }
+    const preparePolicies = useCallback(async (id = null) => {
+        const key = id == null ? core.CRUD_POLICIES : String(id)
+        const current = latest.current
+
+        if (current.allowed[key]) {
+            return
+        }
 
         try {
-            const response = await axios({
-                method: policyMethod,
-                url: policyUrl,
-                data: policyMethod === 'post' ? requestData : null,
-                params: policyMethod === 'get' ? requestData : null,
-            })
+            const response = await axios(core.requestConfig(current.policyMethod, current.policyUrl, {
+                _token: core.csrfToken(),
+                id,
+            }))
 
-            policyAttempts.current = 0
-
-            const allowed = actions.map((action) => (
-                response.data[action.id] ? { ...action, policy: true } : action
-            ))
-
-            // La versión Vue mutaba las acciones en sitio; en React eso no
-            // repinta nada, así que se sustituye la lista.
-            if (actions === crudActions) {
-                setCrudActions(allowed)
-            } else {
-                setBody((rows) => rows.map((row) => (
-                    row.actions === actions ? { ...row, actions: allowed } : row
-                )))
-            }
-
-            return allowed
-        } catch {
-            if (policyAttempts.current <= 3) {
-                timers.current.push(window.setTimeout(() => {
-                    policyAttempts.current += 1
-                    actionButtonClicked(actions)
-                }, 1500))
-
+            if (! mounted.current) {
                 return
             }
 
-            timers.current.push(window.setTimeout(() => {
-                policyAttempts.current = 0
-            }, 3000))
+            // Se pinta ya: el menú se abre justo después, y tiene que abrir con
+            // los permisos puestos y no enseñarlos cambiando.
+            flushSync(() => {
+                setAllowed((previous) => ({ ...previous, [key]: response.data ?? {} }))
+            })
+        } catch {
+            // El menú se abre igual, con todo deshabilitado.
+            notifyError(latest.current.labels.policiesFailed)
         }
-    }, [policyMethod, policyUrl, crudActions])
-
-    // Carga inicial y recarga cuando cambian orden o página.
-    useEffect(() => {
-        updateFilters()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [orderBy, sort, page])
-
-    // Un filtro nuevo vuelve a la primera página; uno externo no.
-    const previousForm = useRef(formFilters)
-    const previousExternal = useRef(externalFilters)
-
-    useEffect(() => {
-        if (isEqual(previousForm.current, formFilters)) {
-            return
-        }
-
-        previousForm.current = formFilters
-        updatePage(1)
-        updateFilters()
-    }, [formFilters, updateFilters, updatePage])
-
-    useEffect(() => {
-        if (isEqual(previousExternal.current, externalFilters)) {
-            return
-        }
-
-        previousExternal.current = externalFilters
-        updateFilters()
-    }, [externalFilters, updateFilters])
-
-    useEffect(() => () => {
-        timers.current.forEach((timer) => window.clearTimeout(timer))
     }, [])
 
+    const run = useCallback(async (action) => {
+        const current = latest.current
+        const text = current.labels
+        const kind = core.actionKind(action)
+
+        if (kind === 'route') {
+            if (! current.navigate) {
+                notifyError(text.actionFailed)
+
+                return undefined
+            }
+
+            try {
+                await current.navigate(core.routeTarget(action, current.extraParams, current.extraQuery))
+            } catch (failure) {
+                // Una ruta que no existe es un error de quien declaró la
+                // acción: el usuario recibe un aviso y la consola, el detalle.
+                notifyError(text.actionFailed)
+                console.error(failure)
+            }
+
+            return undefined
+        }
+
+        if (kind === 'link') {
+            globalThis.window?.open(action.params?.link, action.params?.target ?? '_self')
+
+            return undefined
+        }
+
+        if (typeof current.model[action.callback] !== 'function') {
+            notifyError(text.actionFailed)
+
+            return undefined
+        }
+
+        try {
+            await current.model[action.callback](action.params)
+        } catch (failure) {
+            if (! core.isCancelled(failure)) {
+                notifyError(core.describeError(failure, text, text.actionFailed).message)
+            }
+
+            return undefined
+        }
+
+        if (action.success) {
+            notifySuccess(action.success)
+        }
+
+        return load()
+    }, [load])
+
+    /**
+     * Una acción masiva recibe los ids seleccionados —también los de otras
+     * páginas— y las filas cargadas que están entre ellos.
+     */
+    const runBulk = useCallback(async (action) => {
+        const current = latest.current
+        const text = current.labels
+
+        if (typeof current.model[action.callback] !== 'function') {
+            notifyError(text.actionFailed)
+
+            return undefined
+        }
+
+        const selected = current.table.state.rowSelection ?? NO_SELECTION
+        const ids = Object.keys(selected).filter((id) => selected[id])
+        const loaded = current.table.getSelectedRowModel().rows.map((row) => row.original)
+
+        try {
+            await current.model[action.callback](ids, loaded)
+        } catch (failure) {
+            if (! core.isCancelled(failure)) {
+                notifyError(core.describeError(failure, text, text.actionFailed).message)
+            }
+
+            return undefined
+        }
+
+        clearSelection()
+
+        if (action.success) {
+            notifySuccess(action.success)
+        }
+
+        return load()
+    }, [clearSelection, load])
+
     return {
-        dataTable: { head, body },
-        pagination,
-        crudActions,
+        table,
+        head,
+        visibleHead,
+        rows,
+        clones,
+        meta,
+        links,
+        loading,
+        error,
         sort,
         orderBy,
         page,
-        updateFilters,
+        crudActions,
+        bulkActions,
+        rowActions,
+        selectedIds,
+        // Lo que devolvía la versión anterior, para quien lo lea desde fuera.
+        dataTable: { head: visibleHead, body: rows },
+        pagination: { meta, links },
+        refresh,
+        clearSelection,
         sortColumn,
         updatePage,
-        actionClicked,
-        actionButtonClicked,
+        preparePolicies,
+        run,
+        runBulk,
     }
 }

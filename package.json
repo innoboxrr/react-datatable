@@ -37,12 +37,12 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@floating-ui/dom": "^1.8.0",
-    "@iconify/react": "^6.0.0",
+    "@tanstack/react-table": "^9.2.4",
     "axios": "^1.7.0"
   },
   "peerDependencies": {
-    "innoboxrr-form-core": "^2.3.0",
+    "innoboxrr-form-core": "^2.6.0",
+    "innoboxrr-react-form-elements": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0"
@@ -52,6 +52,8 @@
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
     "@vitejs/plugin-react": "^5.0.0",
+    "innoboxrr-form-core": "^2.6.0",
+    "innoboxrr-react-form-elements": "^3.4.0",
     "jsdom": "^25.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

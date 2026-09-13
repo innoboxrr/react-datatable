@@ -1,119 +1,178 @@
-import { useMemo } from 'react'
-import ActionListComponent from './ActionListComponent.jsx'
-import DatatableIcon from './DatatableIcon.jsx'
-import NavDropdownComponent from './NavDropdownComponent.jsx'
+import IconComponent from 'innoboxrr-react-form-elements/src/IconComponent.jsx'
+import MenuComponent from 'innoboxrr-react-form-elements/src/MenuComponent.jsx'
+import SkeletonComponent from 'innoboxrr-react-form-elements/src/SkeletonComponent.jsx'
 
-const cellValue = (head, row) => (
-    typeof head.parser === 'function' ? head.parser(row[head.id], row) : row[head.id]
-)
+import { DEFAULT_LABELS, ariaSort, cellValue, componentProps, sortIcon } from '../table.js'
+import useTheme from '../useTheme.js'
+
+const SKELETON_ROWS = 5
+
+const headOf = (cell) => cell.column.columnDef.meta?.head ?? {}
 
 /**
- * Gemelo de DataTableComponent.vue: la tabla propiamente dicha.
+ * Gemelo de DataTableComponent.vue: la tabla propiamente dicha, sobre una
+ * instancia de TanStack Table.
+ *
+ * El menú de cada fila espera a conocer los permisos antes de abrirse. Antes
+ * se abría al instante con todo deshabilitado y se habilitaba cuando llegaba
+ * la respuesta, y el usuario veía parpadear lo que no podía hacer.
  */
 export default function DataTableComponent({
+    table,
+    head = [],
+    rows = [],
+    clones = [],
+    loading = false,
+    error = null,
     actions = false,
-    dataTable,
-    extraParams = {},
-    extraQuery = {},
+    selectable = false,
     showTableHeader = true,
     dataTableComponents = {},
+    labels = DEFAULT_LABELS,
+    orderBy = null,
+    sort = {},
+    itemsFor = () => [],
+    prepareRow = async () => {},
     onSortColumn,
-    onActionButtonClicked,
-    onActionClicked,
+    onRetry,
 }) {
-    const head = useMemo(() => dataTable.head ?? [], [dataTable.head])
+    const theme = useTheme()
 
-    /**
-     * Copia aislada de cada fila, para que un parser del modelo no pueda mutar
-     * los datos de la tabla.
-     *
-     * La versión Vue clona con JSON dentro de setData(), es decir una vez por
-     * celda: con 20 filas y 8 columnas son 160 clonados en cada repintado. Un
-     * clon por fila y repintado deja lo mismo en 20 — y, a diferencia de una
-     * caché de módulo, un parser que escriba en su copia no la envenena para
-     * los repintados siguientes.
-     */
-    const body = useMemo(
-        () => (dataTable.body ?? []).map((row) => structuredClone(row)),
-        [dataTable.body]
-    )
+    const colspan = head.length + (selectable ? 1 : 0) + (actions ? 1 : 0)
+
+    const allSelected = rows.length > 0 && table.getIsAllPageRowsSelected()
+    const someSelected = table.getIsSomePageRowsSelected() && ! allSelected
+
+    const renderCell = (cell, row) => {
+        const column = headOf(cell)
+        const Component = column.component ? (dataTableComponents[column.component] ?? null) : null
+
+        if (Component) {
+            return (
+                <Component
+                    {...componentProps(cellValue(column, clones[row.index] ?? row.original))}
+                    onCallback={(payload) => (
+                        typeof column.callback === 'function' ? column.callback(payload, row.original) : null
+                    )} />
+            )
+        }
+
+        const value = cellValue(column, clones[row.index] ?? row.original)
+
+        return column.html ? <span dangerouslySetInnerHTML={{ __html: value }} /> : value
+    }
+
+    const renderBody = () => {
+        // Primera carga: la forma de las filas, mientras llegan.
+        if (loading && rows.length === 0) {
+            return Array.from({ length: SKELETON_ROWS }, (_, index) => (
+                <tr key={`skeleton-${index}`} data-skeleton="true">
+                    {selectable ? <td className={theme.tableSelect} /> : null}
+                    {head.map((column) => (
+                        <td key={column.id}><SkeletonComponent /></td>
+                    ))}
+                    {actions ? <td className={theme.tableSelect} /> : null}
+                </tr>
+            ))
+        }
+
+        // Sin filas se dice por qué: no es lo mismo vacío que prohibido.
+        if (rows.length === 0) {
+            return (
+                <tr>
+                    <td colSpan={colspan} className={theme.tableEmpty}>
+                        {error ? (
+                            <>
+                                <span role="alert">{error.message}</span>
+                                {error.retryable ? (
+                                    <button type="button" className={theme.buttonLink} onClick={() => onRetry?.()}>
+                                        {labels.retry}
+                                    </button>
+                                ) : null}
+                            </>
+                        ) : labels.empty}
+                    </td>
+                </tr>
+            )
+        }
+
+        return table.getRowModel().rows.map((row) => (
+            <tr key={row.id} data-selected={row.getIsSelected() ? 'true' : undefined}>
+                {selectable ? (
+                    <td className={theme.tableSelect}>
+                        <input
+                            type="checkbox"
+                            className={theme.checkbox}
+                            aria-label={`${labels.selectRow} ${row.original.id}`}
+                            checked={row.getIsSelected()}
+                            onChange={row.getToggleSelectedHandler()} />
+                    </td>
+                ) : null}
+
+                {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className={headOf(cell).numeric ? theme.tableNumeric : undefined}>
+                        {renderCell(cell, row)}
+                    </td>
+                ))}
+
+                {actions ? (
+                    <td className={theme.tableSelect}>
+                        <MenuComponent
+                            items={itemsFor(row.original)}
+                            label={`${labels.rowActions} ${row.original.id}`}
+                            beforeOpen={() => prepareRow(row.original.id)} />
+                    </td>
+                ) : null}
+            </tr>
+        ))
+    }
 
     return (
-        <div className="sm:rounded-lg overflow-x-auto">
-            <table className="min-w-full w-full text-sm text-left text-slate-500 dark:text-slate-400 p-4">
+        <div className={theme.tableContainer}>
+            <table className={[theme.table, theme.tableSticky].filter(Boolean).join(' ')} aria-busy={loading ? 'true' : 'false'}>
                 {showTableHeader ? (
-                    <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 rounded-sm">
+                    <thead>
                         <tr>
+                            {selectable ? (
+                                <th scope="col" className={theme.tableSelect}>
+                                    <input
+                                        type="checkbox"
+                                        className={theme.checkbox}
+                                        aria-label={labels.selectAll}
+                                        checked={allSelected}
+                                        // React no tiene prop para esto: es una propiedad del DOM.
+                                        ref={(element) => {
+                                            if (element) {
+                                                element.indeterminate = someSelected
+                                            }
+                                        }}
+                                        disabled={rows.length === 0}
+                                        onChange={(event) => table.toggleAllPageRowsSelected(event.target.checked)} />
+                                </th>
+                            ) : null}
+
                             {head.map((column) => (
                                 <th
                                     key={column.id}
                                     id={`th_${column.id}`}
-                                    className={`px-6 py-3${column.sortable ? ' pointer' : ''}`}
                                     scope="col"
-                                    onClick={() => onSortColumn?.(column)}>
-                                    {column.value}
+                                    className={column.numeric ? theme.tableNumeric : undefined}
+                                    aria-sort={ariaSort(column, orderBy, sort)}>
+                                    {column.sortable === true ? (
+                                        <button type="button" className={theme.tableSort} onClick={() => onSortColumn?.(column)}>
+                                            <span>{column.value}</span>
+                                            <IconComponent name={sortIcon(column, orderBy, sort)} size={12} />
+                                        </button>
+                                    ) : column.value}
                                 </th>
                             ))}
-                            {actions ? <th className="fe-shrink"></th> : null}
+
+                            {actions ? <th scope="col" className={theme.tableSelect} aria-label={labels.actions} /> : null}
                         </tr>
                     </thead>
                 ) : null}
 
-                <tbody>
-                    {(dataTable.body ?? []).map((row, index) => (
-                        <tr
-                            key={row.id}
-                            className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                            {head.map((column) => {
-                                // Las celdas leen de la copia; las acciones,
-                                // de la fila real, porque su identidad es lo
-                                // que el hook usa para sustituirlas al
-                                // resolver las politicas.
-                                const value = cellValue(column, body[index] ?? row)
-                                const Component = column.component ? dataTableComponents[column.component] : null
-
-                                return (
-                                    <td key={column.id} className="px-6 py-4">
-                                        {Component ? (
-                                            <Component
-                                                {...(typeof value === 'object' && value !== null ? value : { value })}
-                                                onCallback={(payload) => (
-                                                    typeof column.callback === 'function'
-                                                        ? column.callback(payload, row)
-                                                        : null
-                                                )} />
-                                        ) : column.html ? (
-                                            <span className="dark:text-white" dangerouslySetInnerHTML={{ __html: value }}></span>
-                                        ) : (
-                                            <span className="dark:text-white">{value}</span>
-                                        )}
-                                    </td>
-                                )
-                            })}
-
-                            {actions ? (
-                                <td className="fe-text-right">
-                                    <button
-                                        type="button"
-                                        aria-label={`Acciones del registro ${row.id}`}
-                                        className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-2 py-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
-                                        popoverTarget={`dropdown_${row.id}`}
-                                        onClick={() => onActionButtonClicked?.(row.actions)}>
-                                        <DatatableIcon icon="actions" />
-                                    </button>
-
-                                    <NavDropdownComponent id={`dropdown_${row.id}`} pos="left">
-                                        <ActionListComponent
-                                            actions={row.actions ?? []}
-                                            extraParams={extraParams}
-                                            extraQuery={extraQuery}
-                                            onActionClicked={onActionClicked} />
-                                    </NavDropdownComponent>
-                                </td>
-                            ) : null}
-                        </tr>
-                    ))}
-                </tbody>
+                <tbody>{renderBody()}</tbody>
             </table>
         </div>
     )

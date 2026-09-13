@@ -1,69 +1,67 @@
+import IconComponent from 'innoboxrr-react-form-elements/src/IconComponent.jsx'
+
+import { DEFAULT_LABELS, summary } from '../table.js'
+import useTheme from '../useTheme.js'
+
 /**
- * Gemelo de SelectPaginationComponent.vue.
+ * Gemelo de SelectPaginationComponent.vue: cuántos registros se ven y en qué
+ * página se está.
  *
- * La página vive en el padre (el hook), así que aquí no hay estado local: la
- * versión Vue lo tenía y se le desincronizaba cuando la página cambiaba desde
- * fuera, por ejemplo al reiniciar los filtros.
+ * No guarda la página: la dueña es la tabla, y una copia local se
+ * desincronizaba cuando la página cambiaba desde fuera.
  */
-export default function SelectPaginationComponent({ meta = {}, onPageChange }) {
-    const current = meta.current_page ?? 1
-    const last = meta.last_page ?? 1
+export default function SelectPaginationComponent({ meta = {}, labels = null, onPageChange }) {
+    const theme = useTheme()
+    const text = { ...DEFAULT_LABELS, ...(labels ?? {}) }
+
+    const current = Number(meta?.current_page ?? 1)
+    const last = Number(meta?.last_page ?? 1)
+
+    const go = (value) => {
+        const page = Number(value)
+
+        if (page >= 1 && page <= last && page !== current) {
+            onPageChange?.(page)
+        }
+    }
 
     return (
-        <div className="pagination" fe-grid="">
-            <div className="fe-w-auto">
-                <ul className="fe-pagination fe-justify-start fe-mt-md" fe-mb="">
-                    <li>
-                        {meta.total > 0
-                            ? <span>Showing {meta.from} to {meta.to} of {meta.total} entries</span>
-                            : <span>No results found</span>}
-                    </li>
-                </ul>
-            </div>
+        <div className={theme.tableFooter}>
+            <span>{summary(meta ?? {}, text)}</span>
 
-            <div className="fe-w-expand">
-                <ul className="fe-pagination fe-justify-end fe-mt-md" fe-mb="">
-                    {current > 1 ? (
-                        <li>
-                            <a
-                                href="#"
-                                aria-label="Anterior"
-                                onClick={(event) => {
-                                    event.preventDefault()
-                                    onPageChange?.(current - 1)
-                                }}>
-                                <span fe-page-prev=""></span>
-                            </a>
-                        </li>
-                    ) : null}
+            {last > 1 ? (
+                <div className={theme.tablePager}>
+                    <button
+                        type="button"
+                        className={theme.iconButton}
+                        aria-label={text.previous}
+                        disabled={current <= 1}
+                        onClick={() => go(current - 1)}>
+                        <IconComponent name="previous" size={14} />
+                    </button>
 
-                    <li>
-                        <select
-                            aria-label="Página"
-                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                            value={current}
-                            onChange={(event) => onPageChange?.(Number(event.target.value))}>
-                            {Array.from({ length: last }, (_, index) => index + 1).map((page) => (
-                                <option key={`page_${page}`} value={page}>{page}</option>
-                            ))}
-                        </select>
-                    </li>
+                    <select
+                        className={theme.select}
+                        aria-label={text.page}
+                        value={current}
+                        onChange={(event) => go(event.target.value)}>
+                        {Array.from({ length: last }, (_, index) => index + 1).map((page) => (
+                            <option key={page} value={page}>{page}</option>
+                        ))}
+                    </select>
 
-                    {current < last ? (
-                        <li>
-                            <a
-                                href="#"
-                                aria-label="Siguiente"
-                                onClick={(event) => {
-                                    event.preventDefault()
-                                    onPageChange?.(current + 1)
-                                }}>
-                                <span fe-page-next=""></span>
-                            </a>
-                        </li>
-                    ) : null}
-                </ul>
-            </div>
+                    <span>{text.of} {last}</span>
+
+                    <button
+                        type="button"
+                        className={theme.iconButton}
+                        aria-label={text.next}
+                        disabled={current >= last}
+                        onClick={() => go(current + 1)}>
+                        <IconComponent name="next" size={14} />
+                    </button>
+                </div>
+            ) : null}
         </div>
     )
 }
