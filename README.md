@@ -1,87 +1,103 @@
 # innoboxrr-react-datatable
 
-Gemelo React de [`innoboxrr-vue-datatable`](../vue-datatable). Los mismos props,
-el mismo contrato de modelo.
+Gemelo React de [`innoboxrr-vue-datatable`](../vue-datatable): los mismos
+props, el mismo contrato de modelo y el mismo comportamiento —barra de
+acciones, filtros, orden y paginación en el servidor, selección con acciones
+masivas, permisos antes de abrir cada menú, esqueletos y errores que se ven—.
 
-El contrato vive en `resources/<framework>/src/models/<entity>/index.js`, que
-es **el mismo archivo** para Vue y para React: funciones puras y llamadas HTTP,
-sin nada de un framework de UI. Por eso las dos tablas reciben lo mismo.
+Por debajo, [TanStack Table](https://tanstack.com/table) lleva el estado de la
+tabla y `innoboxrr-react-form-elements` pone el menú, los iconos y los
+esqueletos, con el tema de `innoboxrr-form-core`.
 
 ## Instalación
 
 ```
-npm i innoboxrr-react-datatable
+npm i innoboxrr-react-datatable innoboxrr-form-core innoboxrr-react-form-elements react-router-dom
+```
+
+```js
+import 'innoboxrr-form-core/styles'
 ```
 
 ## Uso
 
 ```jsx
+import { useRef, useState } from 'react'
 import DataTable, { registerRoutes } from 'innoboxrr-react-datatable'
-import * as postModel from './models/post'
+import * as productModel from './models/product'
 
 registerRoutes({
-    AdminCreatePost: '/admin/posts/create',
-    AdminEditPost: '/admin/posts/:id/edit',
-    AdminShowPost: '/admin/posts/:id',
+    AdminCreateProduct: '/admin/products/create',
+    AdminEditProduct: '/admin/products/:id/edit',
 })
 
-<DataTable
-    dataUrl={route('api.acme.blog.post.index')}
-    policyUrl={route('api.acme.blog.post.policies')}
-    model={postModel}
-    filterForm={<FilterForm onSubmit={setFilters} />} />
+export default function Products() {
+    const table = useRef(null)
+    const [filters, setFilters] = useState({})
+
+    // Tras crear o editar en un drawer: table.current.refresh()
+
+    return (
+        <DataTable
+            ref={table}
+            dataUrl={route('api.acme.shop.product.index')}
+            dataMethod="get"
+            policyUrl={route('api.acme.shop.product.policies')}
+            policyMethod="get"
+            model={productModel}
+            formFilters={filters}
+            selectable
+            filterForm={<FilterForm onSubmit={setFilters} />} />
+    )
+}
 ```
+
+Los avisos y las confirmaciones necesitan, una vez en la aplicación,
+`ToastRegionComponent` y `ConfirmHostComponent` de
+`innoboxrr-react-form-elements`.
+
+Los props, el contrato del modelo, `bulkActions`, los permisos y lo que se ve
+mientras carga o cuando falla están descritos en el
+[README de la versión Vue](../vue-datatable/README.md): son idénticos.
 
 ## Equivalencias con la versión Vue
 
 | Vue | React |
 |---|---|
-| `<slot name="filterForm">` | prop `filterForm` (React no tiene slots con nombre) |
-| `@sortColumn`, `@actionClicked`… | props `onSortColumn`, `onActionClicked`… |
-| `defineExpose({ crudActions, dataTable, pagination })` | el hook `useDataTable`, exportado |
-| rutas con nombre de vue-router | `registerRoutes()` (ver abajo) |
-| `uk-toggle` sobre el formulario de filtros | estado del componente |
+| `<template #filterForm>` | prop `filterForm` |
+| `ref` con `defineExpose` | `ref` (React 19): `refresh()`, `clearSelection()`, `selectedIds`, `table` |
+| rutas con nombre de vue-router | `registerRoutes()` (abajo) |
+| componente de celda con `@callback` | componente de celda con `onCallback` |
 
-Todo lo demás —`dataUrl`, `dataMethod`, `model`, `policyUrl`, `policyMethod`,
-`showTopbar`, `hasActions`, `hasFilter`, `formFilters`, `externalFilters`,
-`extraParams`, `extraQuery`, `hideColumns`, `cardWrapper`, `showTableHeader`—
-se llama y significa lo mismo.
+La lógica común —columnas, petición, errores, acciones— vive en
+`src/table.js`, que es el mismo archivo en los dos paquetes.
 
 ## Rutas con nombre
 
-El contrato del modelo apunta a rutas **por nombre**:
-
-```js
-params: { to: { name: 'AdminEditPost', params: { id: 1 } } }
-```
-
-vue-router resuelve eso de fábrica; React Router 7 no tiene rutas con nombre.
-`registerRoutes({ nombre: patrón })` cierra ese hueco, y el módulo generado lo
-llama al montarse. Una ruta sin registrar **lanza**: devolver `#` escondería el
-fallo hasta que alguien hiciera clic.
+El contrato apunta a rutas **por nombre** (`params.to.name`). React Router 7 no
+las tiene, así que `registerRoutes({ nombre: patrón })` dice a qué patrón
+corresponde cada una. Una acción hacia una ruta sin registrar avisa al usuario y
+deja el detalle en la consola.
 
 ## `useDataTable`
 
-Toda la lógica —cargar, ordenar, paginar, resolver políticas— está en el hook,
-fuera del componente. Se puede probar sin montar nada y sirve para pintar la
-misma tabla de otra forma:
-
 ```jsx
-const { dataTable, pagination, sortColumn, updatePage } = useDataTable({ ... })
+import { useDataTable } from 'innoboxrr-react-datatable'
+
+const { table, rows, meta, loading, error, sortColumn, updatePage, refresh } = useDataTable({ ...props, navigate, labels })
 ```
 
-## Diferencias deliberadas
+## De 2.x a 3.0
 
-- **El clon de cada fila se hace una vez por repintado**, no en una caché de
-  módulo. La versión Vue guarda los clones en un `WeakMap` global, así que un
-  `parser` que escriba en su fila envenena esa copia para el resto de la vida
-  de la página, y dos tablas que compartan objetos de fila comparten clones.
-- **La paginación no tiene estado propio.** En Vue lo tenía y se le
-  desincronizaba cuando la página cambiaba desde fuera, por ejemplo al
-  reiniciar los filtros.
-- **`ActionListComponent` es uno solo.** En Vue el bloque de acciones está
-  copiado en `DataTable.vue` y en `DataTableComponent.vue`, y las dos copias no
-  hacen lo mismo: la de dentro soporta `action.link` y la de fuera no.
+- Ya no existen `ActionListComponent`, `DatatableIcon`, `NavDropdownComponent`,
+  `IconRouteComponent`, `IconLinkComponent` ni `DisabledLinkComponent`.
+- `DataTableComponent` recibe la instancia de TanStack Table en `table`;
+  `SelectPaginationComponent` sigue recibiendo `meta` y `onPageChange`.
+- Las acciones de ruta navegan desde el menú con `useNavigate`.
+- Los textos están en español y se cambian con `labels`.
+- Un fallo ya no se reintenta: se ve, y se reintenta a mano.
+- `innoboxrr-react-form-elements` pasa a ser dependencia par, y
+  `innoboxrr-form-core` sube a `^2.6`.
 
 ## Pruebas
 
