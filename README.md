@@ -104,3 +104,7 @@ const { table, rows, meta, loading, error, sortColumn, updatePage, refresh } = u
 ```
 npm test
 ```
+
+## Documentación / Documentation
+
+Documentación completa del ecosistema, en español y en inglés / Full ecosystem documentation, in Spanish and English: <https://innoboxrr.github.io/docs/interfaz/datatables>
