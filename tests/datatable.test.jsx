@@ -160,7 +160,6 @@ describe('carga', () => {
         await renderTable()
 
         expect(dataCalls()[0].params).toMatchObject({
-            _token: 'tok-123',
             managed: true,
             except_view_any: true,
             orderBy: 'id',
@@ -169,11 +168,22 @@ describe('carga', () => {
         })
     })
 
-    it('usa data en lugar de params cuando el metodo es post', async () => {
+    /**
+     * En el piloto de la aplicación base la tabla pedía
+     * GET /api/app/product/index?_token=...: el token CSRF acababa en los
+     * registros de acceso, en los proxies y en el historial del navegador.
+     */
+    it('por GET no manda el token CSRF en la query', async () => {
+        await renderTable()
+
+        expect(dataCalls()[0].params).not.toHaveProperty('_token')
+    })
+
+    it('usa data en lugar de params cuando el metodo es post, con el token CSRF', async () => {
         await renderTable({ dataMethod: 'post' })
 
         expect(dataCalls()[0]).toMatchObject({ method: 'post', params: null })
-        expect(dataCalls()[0].data).not.toBeNull()
+        expect(dataCalls()[0].data).toMatchObject({ _token: 'tok-123', managed: true, except_view_any: true })
     })
 
     it('publica los filtros vigentes en el modelo', async () => {
@@ -435,6 +445,22 @@ describe('permisos y acciones', () => {
         await openMenu('Acciones del registro 1')
 
         expect(policyCalls()).toHaveLength(1)
+    })
+
+    it('pregunta los permisos por GET sin el token CSRF en la query', async () => {
+        await renderTable()
+
+        await openMenu('Acciones del registro 1')
+
+        expect(policyCalls()[0].params).toEqual({ id: 1 })
+    })
+
+    it('pregunta los permisos por POST con el token CSRF en el cuerpo', async () => {
+        await renderTable({ policyMethod: 'post' })
+
+        await openMenu('Acciones del registro 1')
+
+        expect(policyCalls()[0]).toMatchObject({ method: 'post', params: null, data: { _token: 'tok-123', id: 1 } })
     })
 
     it('si no se pueden comprobar los permisos avisa y abre con todo deshabilitado', async () => {

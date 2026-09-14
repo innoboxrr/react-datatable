@@ -130,9 +130,13 @@ export const sortIcon = (column, orderBy, sort = {}) => {
 /**
  * Lo que espera el backend. Con orden interno, el del usuario gana a lo que
  * traigan los filtros externos; sin él, es al revés.
+ *
+ * El token CSRF no va aquí: no es un filtro, y lo que sale de aquí también lo
+ * recibe el modelo con `setFilters()`. Lo pone `requestConfig()`, que sabe por
+ * dónde viaja la petición.
  */
 export const requestFilters = ({ formFilters = {}, externalFilters = {}, orderBy, sort = {}, page, internalSort }) => {
-    const params = { _token: csrfToken(), managed: true, except_view_any: true }
+    const params = { managed: true, except_view_any: true }
     const order = { orderBy, orderMode: sort[orderBy] }
 
     return internalSort
@@ -140,12 +144,35 @@ export const requestFilters = ({ formFilters = {}, externalFilters = {}, orderBy
         : { ...params, ...formFilters, ...order, ...externalFilters, page }
 }
 
-export const requestConfig = (method, url, payload) => ({
-    method,
-    url,
-    data: method === 'post' ? payload : null,
-    params: method === 'get' ? payload : null,
-})
+/**
+ * Los métodos cuyo payload viaja en la query. En el piloto de la aplicación
+ * base la tabla pedía GET /api/app/product/index?_token=...: el token CSRF
+ * acababa en los registros de acceso, en los proxies y en el historial del
+ * navegador. Laravel no comprueba CSRF en ellos y axios ya manda X-XSRF-TOKEN
+ * desde la cookie, así que no hace falta.
+ */
+const QUERY_METHODS = ['get', 'head']
+
+const withCsrfToken = (method, payload) => {
+    if (QUERY_METHODS.includes(String(method ?? '').toLowerCase())) {
+        const { _token: omitted, ...rest } = payload ?? {}
+
+        return rest
+    }
+
+    return { _token: csrfToken(), ...payload }
+}
+
+export const requestConfig = (method, url, payload) => {
+    const body = withCsrfToken(method, payload)
+
+    return {
+        method,
+        url,
+        data: method === 'post' ? body : null,
+        params: method === 'get' ? body : null,
+    }
+}
 
 /** El usuario canceló una confirmación: no es un error que haya que contar. */
 export const isCancelled = (error) => ['RequestCancelledError', 'CanceledError'].includes(error?.name)

@@ -257,10 +257,8 @@ export default function useDataTable({
         }
 
         try {
-            const response = await axios(core.requestConfig(current.policyMethod, current.policyUrl, {
-                _token: core.csrfToken(),
-                id,
-            }))
+            // El token CSRF lo pone requestConfig, solo si no viaja en la query.
+            const response = await axios(core.requestConfig(current.policyMethod, current.policyUrl, { id }))
 
             if (! mounted.current) {
                 return

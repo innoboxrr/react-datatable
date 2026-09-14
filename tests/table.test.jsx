@@ -9,6 +9,7 @@ import {
     hiddenColumnIds,
     isCancelled,
     menuItems,
+    requestConfig,
     requestFilters,
     routeTarget,
     summary,
@@ -67,9 +68,12 @@ describe('orden', () => {
 describe('peticion', () => {
     const base = { formFilters: { name: 'form' }, externalFilters: { orderBy: 'external' }, orderBy: 'id', sort: { id: 'asc' }, page: 2 }
 
+    /**
+     * El token CSRF no es un filtro: lo pone la petición, que es la que sabe
+     * si viaja en la query o en el cuerpo.
+     */
     it('manda lo que espera el backend', () => {
         expect(requestFilters({ ...base, externalFilters: {} })).toEqual({
-            _token: 'tok-123',
             managed: true,
             except_view_any: true,
             name: 'form',
@@ -82,6 +86,37 @@ describe('peticion', () => {
     it('sin orden interno manda el de los filtros externos; con el, el del usuario', () => {
         expect(requestFilters({ ...base, internalSort: false }).orderBy).toBe('external')
         expect(requestFilters({ ...base, internalSort: true }).orderBy).toBe('id')
+    })
+})
+
+describe('token CSRF', () => {
+    const filters = () => requestFilters({ orderBy: 'id', sort: { id: 'asc' }, page: 1 })
+
+    /**
+     * En el piloto de la aplicación base la tabla pedía
+     * GET /api/app/product/index?_token=...: el token acababa en los registros
+     * de acceso, en los proxies y en el historial del navegador. Laravel no
+     * comprueba CSRF en GET y axios ya manda X-XSRF-TOKEN desde la cookie.
+     */
+    it('una peticion GET no lo lleva en la query', () => {
+        const config = requestConfig('get', '/api/app/product/index', { _token: 'tok-123', ...filters() })
+
+        expect(config.params).not.toHaveProperty('_token')
+        expect(config.params).toEqual({ managed: true, except_view_any: true, orderBy: 'id', orderMode: 'asc', page: 1 })
+    })
+
+    it.each(['GET', 'head', 'HEAD'])('una peticion %s tampoco lo lleva', (method) => {
+        const config = requestConfig(method, '/api/app/product/index', { _token: 'tok-123', id: 1 })
+
+        expect(config.params?._token).toBeUndefined()
+        expect(config.data?._token).toBeUndefined()
+    })
+
+    it('una peticion POST lo sigue llevando en el cuerpo', () => {
+        const config = requestConfig('post', '/api/app/product/index', filters())
+
+        expect(config.params).toBeNull()
+        expect(config.data).toEqual({ _token: 'tok-123', managed: true, except_view_any: true, orderBy: 'id', orderMode: 'asc', page: 1 })
     })
 })
 
